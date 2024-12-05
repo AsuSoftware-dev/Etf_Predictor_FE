@@ -12,8 +12,16 @@ import {
   Title,
   Tooltip,
   Legend,
+  CoreChartOptions,
+  ElementChartOptions,
+  PluginChartOptions,
+  DatasetChartOptions,
+  ScaleChartOptions,
+  LineControllerChartOptions,
 } from "chart.js";
 import { useState } from "react";
+import zoomPlugin from "chartjs-plugin-zoom";
+import { _DeepPartialObject } from "node_modules/chart.js/dist/types/utils";
 
 // Înregistrare componente
 ChartJS.register(
@@ -23,7 +31,8 @@ ChartJS.register(
   LineElement,
   Title,
   Tooltip,
-  Legend
+  Legend,
+  zoomPlugin
 );
 
 const fetchFinancialData = async (symbol: string): Promise<FinancialDataEntry[]> => {
@@ -77,7 +86,8 @@ const App = () => {
   };
 
   // Configurare opțiuni grafic
-  const chartOptions = {
+  // Configurare opțiuni grafic
+  const chartOptions: _DeepPartialObject<CoreChartOptions<"line"> & ElementChartOptions<"line"> & PluginChartOptions<"line"> & DatasetChartOptions<"line"> & ScaleChartOptions<"line"> & LineControllerChartOptions> = {
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
@@ -96,6 +106,21 @@ const App = () => {
           size: 16,
         },
       },
+      zoom: {
+        pan: {
+          enabled: true,
+          mode: "xy", // Permite panning atât pe axa X, cât și pe axa Y
+        },
+        zoom: {
+          wheel: {
+            enabled: true, // Zoom cu scroll
+          },
+          pinch: {
+            enabled: true, // Zoom cu pinch (pe touchscreen)
+          },
+          mode: "xy", // Permite zoom atât pe axa X, cât și pe Y
+        },
+      },
     },
     scales: {
       x: {
@@ -111,9 +136,18 @@ const App = () => {
             size: 12,
           },
           callback: function (tickValue: string | number) {
-            return `$${tickValue}`;
-          }, // Adăugăm simbolul $
-        },
+            if (typeof tickValue === "number") {
+              const absValue = Math.abs(tickValue); // Luăm valoarea absolută
+              if (absValue >= 1_000_000) {
+                return `${tickValue < 0 ? "-" : ""}$${(absValue / 1_000_000).toFixed(2)}M`; // Milioane
+              } else if (absValue >= 1_000) {
+                return `${tickValue < 0 ? "-" : ""}$${(absValue / 1_000).toFixed(2)}K`; // Mii
+              }
+              return `${tickValue < 0 ? "-" : ""}$${absValue.toFixed(2)}`; // Sub 1000
+            }
+            return tickValue; // În cazul în care tickValue este un string
+          },                
+        }
       },
     },
   };
