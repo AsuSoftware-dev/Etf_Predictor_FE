@@ -2,7 +2,6 @@
 import { useQuery } from "react-query";
 import { Line } from "react-chartjs-2";
 import { FinancialDataEntry } from "./shared/interfaces/financial-data-entry";
-
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -19,11 +18,11 @@ import {
   ScaleChartOptions,
   LineControllerChartOptions,
 } from "chart.js";
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import zoomPlugin from "chartjs-plugin-zoom";
 import { _DeepPartialObject } from "node_modules/chart.js/dist/types/utils";
 
-// Înregistrare componente
+// Înregistrare componente ChartJS
 ChartJS.register(
   CategoryScale,
   LinearScale,
@@ -35,26 +34,45 @@ ChartJS.register(
   zoomPlugin
 );
 
+const apiUrl = import.meta.env.VITE_API_URL;
+
+// Funcția pentru fetch
 const fetchFinancialData = async (symbol: string): Promise<FinancialDataEntry[]> => {
-  const response = await fetch(`http://127.0.0.1:8080/data/${symbol}/`);
+  const response = await fetch(`${apiUrl}/data/${symbol}/`);
   return response.json();
+};
+
+// Funcția debounce folosind useCallback
+const debounce = (func: (...args: any[]) => void, delay: number) => {
+  let timer: NodeJS.Timeout;
+  return (...args: any[]) => {
+    clearTimeout(timer);
+    timer = setTimeout(() => func(...args), delay);
+  };
 };
 
 const App = () => {
   const [symbol, setSymbol] = useState("SPY"); // Simbolul ETF implicit
-  const { data, isLoading, refetch } = useQuery<FinancialDataEntry[]>(
-    ["financialData", symbol],
-    () => fetchFinancialData(symbol),
-    { keepPreviousData: true }
+  const [debouncedSymbol, setDebouncedSymbol] = useState("SPY"); // Simbolul debounced
+
+  // Funcția debounce pentru actualizarea simbolului cu întârziere
+  const debouncedUpdateSymbol = useCallback(
+    debounce((value: string) => setDebouncedSymbol(value), 1000),
+    []
   );
 
   const handleSymbolChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    setSymbol(event.target.value.toUpperCase()); // Simbolurile ETF sunt uppercase
+    const newSymbol = event.target.value.toUpperCase();
+    setSymbol(newSymbol); // Actualizare imediată pentru UI
+    debouncedUpdateSymbol(newSymbol); // Actualizare cu întârziere pentru fetch
   };
 
-  const handleUpdate = () => {
-    refetch(); // Actualizează graficul
-  };
+  // Folosește debouncedSymbol pentru query
+  const { data, isLoading } = useQuery<FinancialDataEntry[]>(
+    ["financialData", debouncedSymbol],
+    () => fetchFinancialData(debouncedSymbol),
+    { keepPreviousData: true }
+  );
 
   if (isLoading) return <div>Loading...</div>;
 
@@ -86,13 +104,12 @@ const App = () => {
   };
 
   // Configurare opțiuni grafic
-  // Configurare opțiuni grafic
   const chartOptions: _DeepPartialObject<CoreChartOptions<"line"> & ElementChartOptions<"line"> & PluginChartOptions<"line"> & DatasetChartOptions<"line"> & ScaleChartOptions<"line"> & LineControllerChartOptions> = {
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
       legend: {
-        position: "bottom" as const, // Mutăm legenda în partea de jos
+        position: "bottom" as const,
         labels: {
           font: {
             size: 12,
@@ -101,7 +118,7 @@ const App = () => {
       },
       title: {
         display: true,
-        text: `${symbol} ETF Price Data`, // Afișăm simbolul curent
+        text: `${debouncedSymbol} ETF Price Data`,
         font: {
           size: 16,
         },
@@ -137,17 +154,17 @@ const App = () => {
           },
           callback: function (tickValue: string | number) {
             if (typeof tickValue === "number") {
-              const absValue = Math.abs(tickValue); // Luăm valoarea absolută
+              const absValue = Math.abs(tickValue);
               if (absValue >= 1_000_000) {
-                return `${tickValue < 0 ? "-" : ""}$${(absValue / 1_000_000).toFixed(2)}M`; // Milioane
+                return `${tickValue < 0 ? "-" : ""}$${(absValue / 1_000_000).toFixed(2)}M`;
               } else if (absValue >= 1_000) {
-                return `${tickValue < 0 ? "-" : ""}$${(absValue / 1_000).toFixed(2)}K`; // Mii
+                return `${tickValue < 0 ? "-" : ""}$${(absValue / 1_000).toFixed(2)}K`;
               }
-              return `${tickValue < 0 ? "-" : ""}$${absValue.toFixed(2)}`; // Sub 1000
+              return `${tickValue < 0 ? "-" : ""}$${absValue.toFixed(2)}`;
             }
-            return tickValue; // În cazul în care tickValue este un string
-          },                
-        }
+            return tickValue;
+          },
+        },
       },
     },
   };
@@ -156,7 +173,7 @@ const App = () => {
     <div className="p-8 w-full">
       {/* Titlu și Input */}
       <div className="mb-4">
-        <h1 className="text-2xl font-bold mb-2">ETF Dashboard</h1>
+        <h1 className="text-xl md:text-2xl font-bold mb-2">ETF Dashboard</h1>
         <div className="flex items-center space-x-2">
           <input
             type="text"
@@ -165,31 +182,25 @@ const App = () => {
             onChange={handleSymbolChange}
             className="px-4 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
-          <button
-            onClick={handleUpdate}
-            className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600"
-          >
-            Update
-          </button>
         </div>
       </div>
 
       {/* Grafic */}
-      <div style={{ height: "500px", width: "100%" }}>
+      <div className="p-4 md:px-16" style={{ height: "500px", width: "100%" }}>
         <Line data={chartData} options={chartOptions} />
       </div>
 
       {/* Legendă explicativă */}
       <div className="mt-4 p-4 bg-gray-100 rounded-md">
         <h2 className="text-lg font-semibold mb-2">Legend:</h2>
-        <ul className="list-disc pl-4">
-          <li>
+        <ul className="list-disc pl-4 space-y-2 md:space-y-0 md:flex md:flex-row md:space-x-4">
+          <li className="md:flex md:items-center">
             <span className="font-bold">Close Price:</span> Prețul de închidere al ETF-ului (în USD).
           </li>
-          <li>
+          <li className="md:flex md:items-center">
             <span className="font-bold">SMA 20:</span> Media mobilă simplă calculată pe ultimele 20 de zile.
           </li>
-          <li>
+          <li className="md:flex md:items-center">
             <span className="font-bold">SMA 50:</span> Media mobilă simplă calculată pe ultimele 50 de zile.
           </li>
         </ul>
