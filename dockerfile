@@ -22,6 +22,11 @@ FROM nginx:alpine
 # Copiază build-ul în folderul Nginx
 COPY --from=build /app/dist /usr/share/nginx/html
 
-# Configurare implicită Nginx
+# Configurare implicită Nginx pentru rutele client-side
+COPY ./nginx.conf /etc/nginx/conf.d/default.conf
+
+# Expune portul 80
 EXPOSE 80
+
+# Pornește Nginx
 CMD ["nginx", "-g", "daemon off;"]
